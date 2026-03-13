@@ -160,6 +160,12 @@ If you want to use the debug build instead:
 powershell -ExecutionPolicy Bypass -File .\scripts\associate_navplayer.ps1
 ```
 
+Remove the file association:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\unassociate_navplayer.ps1
+```
+
 ## Thumbnail Output
 
 In `Single` mode, enable `Get Thumbnail` in the toolbar.

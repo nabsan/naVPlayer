@@ -1,4 +1,5 @@
-﻿use std::collections::HashMap;
+﻿use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::ffi::CString;
 use std::fs;
 use std::os::raw::{c_char, c_double, c_int, c_void};
@@ -409,11 +410,30 @@ impl WindowMpv {
     }
 
     fn load_video(&self, path: &Path) -> Result<()> {
-        let raw_path = path.to_string_lossy();
-        let quoted = quote_for_mpv_command(&raw_path);
-        let command = format!("loadfile {quoted}");
-        self.command_string(&command)
-            .map_err(|err| anyhow!("failed to load {}: {err:#}", path.display()))
+        let playlist = sibling_video_files(path);
+        let current_index = playlist
+            .iter()
+            .position(|candidate| candidate == path)
+            .unwrap_or(0);
+
+        for (index, entry) in playlist.iter().enumerate() {
+            let raw_path = entry.to_string_lossy();
+            let quoted = quote_for_mpv_command(&raw_path);
+            let command = if index == 0 {
+                format!("loadfile {quoted} replace")
+            } else {
+                format!("loadfile {quoted} append")
+            };
+            self.command_string(&command)
+                .map_err(|err| anyhow!("failed to queue {}: {err:#}", entry.display()))?;
+        }
+
+        if current_index > 0 {
+            self.command_string(&format!("playlist-play-index {current_index}"))
+                .map_err(|err| anyhow!("failed to select playlist index {current_index}: {err:#}"))?;
+        }
+
+        Ok(())
     }
 
     fn detect_closed(&mut self) -> bool {
@@ -634,6 +654,8 @@ fn write_input_conf(title: &str) -> Result<PathBuf> {
         "RIGHT repeatable script-message navplayer-safe-seek 10 3",
         "LEFT script-message navplayer-safe-seek -10 3",
         "LEFT repeatable script-message navplayer-safe-seek -10 3",
+        "n script-message navplayer-playlist-next",
+        "p script-message navplayer-playlist-prev",
         "SPACE cycle pause",
         "MBTN_LEFT cycle pause",
         "f cycle fullscreen",
@@ -697,6 +719,7 @@ mp.register_script_message('navplayer-safe-seek', function(step_text, guard_text
         end
 
         mp.commandv('seek', tostring(target), 'absolute', 'exact')
+        mp.osd_message('>>', 0.35)
         return
     end
 
@@ -711,6 +734,7 @@ mp.register_script_message('navplayer-safe-seek', function(step_text, guard_text
     end
 
     mp.commandv('seek', tostring(target), 'absolute', 'exact')
+    mp.osd_message('<<', 0.35)
 end)
 
 mp.register_script_message('navplayer-capture-thumbnail', function()
@@ -729,11 +753,73 @@ mp.register_script_message('navplayer-capture-thumbnail', function()
     mp.commandv('screenshot-to-file', output_path, 'video')
     mp.osd_message('Saved thumbnail: ' .. output_path, 2.0)
 end)
+
+local function show_current_file()
+    local title = mp.get_property('media-title')
+    if title and title ~= '' then
+        mp.osd_message('Now playing: ' .. title, 1.5)
+    end
+end
+
+mp.register_script_message('navplayer-playlist-next', function()
+    mp.commandv('playlist-next', 'force')
+    mp.add_timeout(0.05, show_current_file)
+end)
+
+mp.register_script_message('navplayer-playlist-prev', function()
+    mp.commandv('playlist-prev', 'force')
+    mp.add_timeout(0.05, show_current_file)
+end)
 "#;
     fs::write(&path, content.trim_start())?;
     Ok(path)
 }
 
+
+fn sibling_video_files(path: &Path) -> Vec<PathBuf> {
+    let Some(parent) = path.parent() else {
+        return vec![path.to_path_buf()];
+    };
+
+    let Ok(entries) = fs::read_dir(parent) else {
+        return vec![path.to_path_buf()];
+    };
+
+    let mut files: Vec<PathBuf> = entries
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|entry| entry.is_file())
+        .filter(|entry| is_supported_video_file(entry))
+        .collect();
+
+    files.sort_by(|left, right| compare_file_names(left, right));
+
+    if files.iter().any(|entry| entry == path) {
+        files
+    } else {
+        vec![path.to_path_buf()]
+    }
+}
+
+fn is_supported_video_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| matches!(ext.to_ascii_lowercase().as_str(), "mp4" | "mov"))
+        .unwrap_or(false)
+}
+
+fn compare_file_names(left: &Path, right: &Path) -> Ordering {
+    let left_name = left
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let right_name = right
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    left_name.cmp(&right_name)
+}
 fn quote_for_mpv_command(input: &str) -> String {
     let escaped = input.replace('\\', "\\\\").replace('"', "\\\"");
     format!("\"{escaped}\"")
@@ -811,3 +897,5 @@ unsafe extern "system" fn hooked_window_proc(
         unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
     }
 }
+
+

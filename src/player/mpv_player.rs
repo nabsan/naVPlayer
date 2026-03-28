@@ -42,11 +42,19 @@ unsafe extern "system" {
     fn MoveWindow(hwnd: *mut c_void, x: c_int, y: c_int, width: c_int, height: c_int, repaint: i32) -> i32;
     fn ShowWindow(hwnd: *mut c_void, cmd_show: c_int) -> i32;
     fn GetSystemMetrics(index: c_int) -> c_int;
+    fn SetForegroundWindow(hwnd: *mut c_void) -> i32;
+    fn BringWindowToTop(hwnd: *mut c_void) -> i32;
+    fn SetWindowPos(hwnd: *mut c_void, hwnd_insert_after: *mut c_void, x: c_int, y: c_int, cx: c_int, cy: c_int, u_flags: u32) -> i32;
 }
 
 const SW_RESTORE: c_int = 9;
 const SM_CXSCREEN: c_int = 0;
 const SM_CYSCREEN: c_int = 1;
+const SWP_NOMOVE: u32 = 0x0002;
+const SWP_NOSIZE: u32 = 0x0001;
+const SWP_SHOWWINDOW: u32 = 0x0040;
+const HWND_TOPMOST: *mut c_void = -1isize as *mut c_void;
+const HWND_NOTOPMOST: *mut c_void = -2isize as *mut c_void;
 
 #[derive(Clone, Copy)]
 struct WindowHook {
@@ -414,6 +422,10 @@ impl WindowMpv {
             unsafe {
                 ShowWindow(hwnd, SW_RESTORE);
                 MoveWindow(hwnd, x, y, width, height, 1);
+                SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+                BringWindowToTop(hwnd);
+                SetForegroundWindow(hwnd);
             }
         }
     }

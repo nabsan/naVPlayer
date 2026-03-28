@@ -32,13 +32,17 @@ The current implementation uses external `libmpv` playback windows controlled by
 - Auto thumbnail capture in `Single` mode
 - Open thumbnail output folder from the toolbar
 - Accept video file paths as launch arguments
-- Windows file association helper script for `.mp4` / `.mov`
+- Windows file association helper scripts for `.mp4` / `.mov`
+- Single-instance behavior for Explorer launches
+  - double-clicking another associated video reuses the existing naVPlayer instance
+  - the main window does not multiply in the background
 
 ## Current Behavior
 
 - Playback happens in external `mpv` child windows, not inside the main egui panel
-- In `Single` mode, when a video is open, the main naVPlayer window minimizes automatically
-- When the single playback window is closed and no video remains, the main window is restored
+- When a video is launched from Explorer by file association, the playback window opens in front and starts playing automatically
+- In associated `Single` playback, the main naVPlayer window stays minimized in the background even after the child playback window is closed
+- Launching `navplayer.exe` directly shows the main naVPlayer window so you can open files manually or use `Multi` mode
 - In `Multi` mode, up to 2 playback windows are auto-arranged initially, then can be moved manually
 
 ## Dependency: libmpv DLL

@@ -11,12 +11,22 @@ use std::path::PathBuf;
 
 use app::{APP_VERSION, NaVPlayerApp};
 use eframe::{egui, Renderer};
+use infra::ipc;
 use infra::logger;
 use tracing_subscriber::EnvFilter;
 
 fn main() {
     init_logging();
     let launch_paths = collect_launch_paths();
+    let ipc_message = if launch_paths.is_empty() {
+        ipc::IpcMessage::show()
+    } else {
+        ipc::IpcMessage::open(launch_paths.clone())
+    };
+    if ipc::send_to_existing_instance(&ipc_message) {
+        return;
+    }
+    let ipc_rx = ipc::start_server();
 
     let options = eframe::NativeOptions {
         renderer: Renderer::Glow,
@@ -31,7 +41,7 @@ fn main() {
     if let Err(error) = eframe::run_native(
         &format!("naVPlayer {}", APP_VERSION),
         options,
-        Box::new(move |cc| Ok(Box::new(NaVPlayerApp::new(cc, launch_paths.clone())))),
+        Box::new(move |cc| Ok(Box::new(NaVPlayerApp::new(cc, launch_paths.clone(), ipc_rx)))),
     ) {
         logger::log_error(&format!("failed to start naVPlayer: {error}"));
         eprintln!("failed to start naVPlayer: {error}");

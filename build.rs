@@ -5,9 +5,6 @@ use std::path::{Path, PathBuf};
 use chrono::{Duration, Utc};
 
 fn main() {
-    println!("cargo:rerun-if-changed=libmpv-2.dll");
-    println!("cargo:rerun-if-changed=build.rs");
-
     let jst_now = Utc::now() + Duration::hours(9);
     let version = format!("ver.{}", jst_now.format("%Y%m%d.%H.%M"));
     println!("cargo:rustc-env=NAVPLAYER_VERSION={version}");

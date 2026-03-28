@@ -678,22 +678,39 @@ mp.register_script_message('navplayer-safe-seek', function(step_text, guard_text
     local guard = tonumber(guard_text) or 3
     local pos = mp.get_property_number('time-pos', 0)
     local duration = mp.get_property_number('duration', 0)
+    local epsilon = 0.2
+
     if step > 0 then
-        if duration > 0 and pos >= duration - guard then
+        if duration <= 0 then
+            mp.commandv('seek', tostring(step), 'relative', 'exact')
             return
         end
-        if duration > 0 and pos + step > duration - guard then
+
+        local max_target = math.max(0, duration - guard - epsilon)
+        if pos >= max_target then
             return
         end
-    else
-        if pos <= guard then
+
+        local target = math.min(pos + step, max_target)
+        if target <= pos + 0.01 then
             return
         end
-        if pos + step < guard then
-            return
-        end
+
+        mp.commandv('seek', tostring(target), 'absolute', 'exact')
+        return
     end
-    mp.commandv('seek', tostring(step), 'relative', 'exact')
+
+    local min_target = guard + epsilon
+    if pos <= min_target then
+        return
+    end
+
+    local target = math.max(pos + step, min_target)
+    if target >= pos - 0.01 then
+        return
+    end
+
+    mp.commandv('seek', tostring(target), 'absolute', 'exact')
 end)
 
 mp.register_script_message('navplayer-capture-thumbnail', function()
@@ -794,4 +811,3 @@ unsafe extern "system" fn hooked_window_proc(
         unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
     }
 }
-

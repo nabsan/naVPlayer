@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+﻿use std::collections::HashMap;
 use std::ffi::CString;
 use std::fs;
 use std::os::raw::{c_char, c_double, c_int, c_void};
@@ -45,6 +45,16 @@ unsafe extern "system" {
     fn SetForegroundWindow(hwnd: *mut c_void) -> i32;
     fn BringWindowToTop(hwnd: *mut c_void) -> i32;
     fn SetWindowPos(hwnd: *mut c_void, hwnd_insert_after: *mut c_void, x: c_int, y: c_int, cx: c_int, cy: c_int, u_flags: u32) -> i32;
+    fn SetFocus(hwnd: *mut c_void) -> *mut c_void;
+    fn SetActiveWindow(hwnd: *mut c_void) -> *mut c_void;
+    fn GetForegroundWindow() -> *mut c_void;
+    fn GetWindowThreadProcessId(hwnd: *mut c_void, process_id: *mut u32) -> u32;
+    fn AttachThreadInput(id_attach: u32, id_attach_to: u32, attach: i32) -> i32;
+}
+
+#[link(name = "kernel32")]
+unsafe extern "system" {
+    fn GetCurrentThreadId() -> u32;
 }
 
 const SW_RESTORE: c_int = 9;
@@ -424,8 +434,7 @@ impl WindowMpv {
                 MoveWindow(hwnd, x, y, width, height, 1);
                 SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
                 SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-                BringWindowToTop(hwnd);
-                SetForegroundWindow(hwnd);
+                focus_window(hwnd);
             }
         }
     }
@@ -722,6 +731,38 @@ fn drain_closed_player_ids() -> Vec<usize> {
     std::mem::take(&mut *ids)
 }
 
+fn focus_window(hwnd: *mut c_void) {
+    unsafe {
+        let foreground = GetForegroundWindow();
+        let current_thread = GetCurrentThreadId();
+        let target_thread = GetWindowThreadProcessId(hwnd, std::ptr::null_mut());
+        let foreground_thread = if foreground.is_null() {
+            0
+        } else {
+            GetWindowThreadProcessId(foreground, std::ptr::null_mut())
+        };
+
+        if foreground_thread != 0 && foreground_thread != current_thread {
+            AttachThreadInput(current_thread, foreground_thread, 1);
+        }
+        if target_thread != 0 && target_thread != current_thread {
+            AttachThreadInput(current_thread, target_thread, 1);
+        }
+
+        BringWindowToTop(hwnd);
+        SetForegroundWindow(hwnd);
+        SetActiveWindow(hwnd);
+        SetFocus(hwnd);
+
+        if target_thread != 0 && target_thread != current_thread {
+            AttachThreadInput(current_thread, target_thread, 0);
+        }
+        if foreground_thread != 0 && foreground_thread != current_thread {
+            AttachThreadInput(current_thread, foreground_thread, 0);
+        }
+    }
+}
+
 unsafe extern "system" fn hooked_window_proc(
     hwnd: HWND,
     msg: u32,
@@ -753,3 +794,4 @@ unsafe extern "system" fn hooked_window_proc(
         unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
     }
 }
+

@@ -129,6 +129,7 @@ impl eframe::App for NaVPlayerApp {
         self.controller.tick(&mut self.state);
         self.sync_parent_window_visibility(ctx);
         ui::render_app(ctx, &mut self.state, &mut self.controller);
-        ctx.request_repaint_after(Duration::from_millis(16));
+        ctx.request_repaint_after(Duration::from_millis(50));
     }
 }
+

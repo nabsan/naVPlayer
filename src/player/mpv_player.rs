@@ -1,5 +1,4 @@
-﻿use std::cmp::Ordering;
-use std::collections::HashMap;
+﻿use std::collections::HashMap;
 use std::ffi::CString;
 use std::fs;
 use std::os::raw::{c_char, c_double, c_int, c_void};
@@ -377,7 +376,7 @@ impl WindowMpv {
         };
         player.set_option_string("title", &player.title)?;
         player.set_option_string("force-window", "yes")?;
-        player.set_option_string("keep-open", "no")?;
+        player.set_option_string("keep-open", "yes")?;
         player.set_option_string("idle", "no")?;
         player.set_option_string("input-default-bindings", "no")?;
         player.set_option_string("native-keyrepeat", "yes")?;
@@ -410,30 +409,11 @@ impl WindowMpv {
     }
 
     fn load_video(&self, path: &Path) -> Result<()> {
-        let playlist = sibling_video_files(path);
-        let current_index = playlist
-            .iter()
-            .position(|candidate| candidate == path)
-            .unwrap_or(0);
-
-        for (index, entry) in playlist.iter().enumerate() {
-            let raw_path = entry.to_string_lossy();
-            let quoted = quote_for_mpv_command(&raw_path);
-            let command = if index == 0 {
-                format!("loadfile {quoted} replace")
-            } else {
-                format!("loadfile {quoted} append")
-            };
-            self.command_string(&command)
-                .map_err(|err| anyhow!("failed to queue {}: {err:#}", entry.display()))?;
-        }
-
-        if current_index > 0 {
-            self.command_string(&format!("playlist-play-index {current_index}"))
-                .map_err(|err| anyhow!("failed to select playlist index {current_index}: {err:#}"))?;
-        }
-
-        Ok(())
+        let raw_path = path.to_string_lossy();
+        let quoted = quote_for_mpv_command(&raw_path);
+        let command = format!("loadfile {quoted}");
+        self.command_string(&command)
+            .map_err(|err| anyhow!("failed to load {}: {err:#}", path.display()))
     }
 
     fn detect_closed(&mut self) -> bool {
@@ -657,10 +637,11 @@ fn write_input_conf(title: &str) -> Result<PathBuf> {
         "n script-message navplayer-playlist-next",
         "p script-message navplayer-playlist-prev",
         "SPACE cycle pause",
-        "MBTN_LEFT cycle pause",
+
         "f cycle fullscreen",
         "Shift+f set fullscreen no",
         "c script-message navplayer-capture-thumbnail",
+        "Ctrl+b no-osd set time-pos 0",
         "q quit 0",
     ]
     .join("\n");
@@ -761,13 +742,70 @@ local function show_current_file()
     end
 end
 
-mp.register_script_message('navplayer-playlist-next', function()
-    mp.commandv('playlist-next', 'force')
-    mp.add_timeout(0.05, show_current_file)
-end)
+local function supported_video(name)
+    local lower = name:lower()
+    return lower:sub(-4) == '.mp4' or lower:sub(-4) == '.mov'
+end
 
-mp.register_script_message('navplayer-playlist-prev', function()
-    mp.commandv('playlist-prev', 'force')
+local function basename(path)
+    local normalized = path:gsub('/', '\\')
+    return normalized:match('([^\\]+)$') or normalized
+end
+
+local function list_siblings(video_path)
+    local dir = split_dir_and_stem(video_path)
+    local entries = utils.readdir(dir, 'files') or {}
+    local files = {}
+
+    for _, name in ipairs(entries) do
+        if supported_video(name) then
+            table.insert(files, name)
+        end
+    end
+
+    table.sort(files, function(a, b)
+        return a:lower() < b:lower()
+    end)
+
+    return dir, files
+end
+
+mp.register_script_message('navplayer-open-adjacent', function(direction)
+    local current_path = mp.get_property('path')
+    if not current_path or current_path == '' then
+        return
+    end
+
+    local dir, files = list_siblings(current_path)
+    local current_name = basename(current_path)
+    local current_index = nil
+
+    for index, name in ipairs(files) do
+        if name == current_name then
+            current_index = index
+            break
+        end
+    end
+
+    if not current_index then
+        return
+    end
+
+    local target_index = nil
+    if direction == 'next' then
+        if current_index >= #files then
+            return
+        end
+        target_index = current_index + 1
+    else
+        if current_index <= 1 then
+            return
+        end
+        target_index = current_index - 1
+    end
+
+    local target_path = utils.join_path(dir, files[target_index])
+    mp.commandv('loadfile', target_path, 'replace')
     mp.add_timeout(0.05, show_current_file)
 end)
 "#;
@@ -776,50 +814,6 @@ end)
 }
 
 
-fn sibling_video_files(path: &Path) -> Vec<PathBuf> {
-    let Some(parent) = path.parent() else {
-        return vec![path.to_path_buf()];
-    };
-
-    let Ok(entries) = fs::read_dir(parent) else {
-        return vec![path.to_path_buf()];
-    };
-
-    let mut files: Vec<PathBuf> = entries
-        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|entry| entry.is_file())
-        .filter(|entry| is_supported_video_file(entry))
-        .collect();
-
-    files.sort_by(|left, right| compare_file_names(left, right));
-
-    if files.iter().any(|entry| entry == path) {
-        files
-    } else {
-        vec![path.to_path_buf()]
-    }
-}
-
-fn is_supported_video_file(path: &Path) -> bool {
-    path.extension()
-        .and_then(|ext| ext.to_str())
-        .map(|ext| matches!(ext.to_ascii_lowercase().as_str(), "mp4" | "mov"))
-        .unwrap_or(false)
-}
-
-fn compare_file_names(left: &Path, right: &Path) -> Ordering {
-    let left_name = left
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    let right_name = right
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    left_name.cmp(&right_name)
-}
 fn quote_for_mpv_command(input: &str) -> String {
     let escaped = input.replace('\\', "\\\\").replace('"', "\\\"");
     format!("\"{escaped}\"")
@@ -897,5 +891,9 @@ unsafe extern "system" fn hooked_window_proc(
         unsafe { DefWindowProcW(hwnd, msg, wparam, lparam) }
     }
 }
+
+
+
+
 
 

@@ -2,11 +2,13 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-const IPC_ADDR: &str = "127.0.0.1:43871";
+// The legacy player uses 43871. Never forward new features to that old binary.
+const IPC_ADDR: &str = "127.0.0.1:43873";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IpcMessage {
@@ -32,7 +34,7 @@ impl IpcMessage {
 
 pub fn send_to_existing_instance(message: &IpcMessage) -> bool {
     let timeout = Duration::from_millis(200);
-    let Ok(addr) = IPC_ADDR.parse() else {
+    let Ok(addr) = ipc_addr().parse() else {
         return false;
     };
     let Ok(mut stream) = TcpStream::connect_timeout(&addr, timeout) else {
@@ -44,16 +46,41 @@ pub fn send_to_existing_instance(message: &IpcMessage) -> bool {
     stream.write_all(payload.as_bytes()).is_ok()
 }
 
-pub fn start_server() -> Receiver<IpcMessage> {
+pub struct IpcInbox {
+    pub receiver: Receiver<IpcMessage>,
+    wakeup: Arc<Mutex<Option<egui::Context>>>,
+}
+
+impl IpcInbox {
+    pub fn attach(&self, ctx: egui::Context) {
+        *self.wakeup.lock().expect("IPC wakeup") = Some(ctx);
+    }
+}
+
+fn ipc_addr() -> String {
+    // Separate loopback endpoint for smoke tests or a portable installation.
+    std::env::var("NAVPLAYER_IPC_ADDR")
+        .ok()
+        .filter(|addr| {
+            addr.parse::<std::net::SocketAddr>()
+                .is_ok_and(|addr| addr.ip().is_loopback())
+        })
+        .unwrap_or_else(|| IPC_ADDR.into())
+}
+
+pub fn start_server() -> IpcInbox {
     let (tx, rx) = mpsc::channel();
+    let wakeup = Arc::new(Mutex::new(None::<egui::Context>));
+    let notify = wakeup.clone();
     std::thread::spawn(move || {
-        let Ok(listener) = TcpListener::bind(IPC_ADDR) else {
+        let Ok(listener) = TcpListener::bind(ipc_addr()) else {
             return;
         };
         for incoming in listener.incoming() {
             let Ok(mut stream) = incoming else {
                 continue;
             };
+            let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
             let mut raw = String::new();
             if stream.read_to_string(&mut raw).is_err() {
                 continue;
@@ -64,7 +91,13 @@ pub fn start_server() -> Receiver<IpcMessage> {
             if tx.send(message).is_err() {
                 break;
             }
+            if let Some(ctx) = notify.lock().expect("IPC wakeup").as_ref() {
+                ctx.request_repaint();
+            }
         }
     });
-    rx
+    IpcInbox {
+        receiver: rx,
+        wakeup,
+    }
 }

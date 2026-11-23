@@ -1,5 +1,5 @@
 ﻿param(
-    [string]$ExePath = $(Join-Path $PSScriptRoot '..\target\debug\navplayer.exe')
+    [string]$ExePath = $(Join-Path $PSScriptRoot '..\dist\navplayer.exe')
 )
 
 $ErrorActionPreference = 'Stop'

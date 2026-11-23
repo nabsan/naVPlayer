@@ -10,7 +10,7 @@ mod util;
 use std::path::PathBuf;
 
 use app::{APP_VERSION, NaVPlayerApp};
-use eframe::{egui, Renderer};
+use eframe::{Renderer, egui};
 use infra::ipc;
 use infra::logger;
 use tracing_subscriber::EnvFilter;
@@ -41,7 +41,13 @@ fn main() {
     if let Err(error) = eframe::run_native(
         &format!("naVPlayer {}", APP_VERSION),
         options,
-        Box::new(move |cc| Ok(Box::new(NaVPlayerApp::new(cc, launch_paths.clone(), ipc_rx)))),
+        Box::new(move |cc| {
+            Ok(Box::new(NaVPlayerApp::new(
+                cc,
+                launch_paths.clone(),
+                ipc_rx,
+            )))
+        }),
     ) {
         logger::log_error(&format!("failed to start naVPlayer: {error}"));
         eprintln!("failed to start naVPlayer: {error}");
@@ -52,13 +58,7 @@ fn collect_launch_paths() -> Vec<PathBuf> {
     std::env::args_os()
         .skip(1)
         .map(PathBuf::from)
-        .filter(|path| path.exists())
-        .filter(|path| {
-            path.extension()
-                .and_then(|ext| ext.to_str())
-                .map(|ext| matches!(ext.to_ascii_lowercase().as_str(), "mp4" | "mov"))
-                .unwrap_or(false)
-        })
+        .filter(|path| path.is_file() && domain::media::is_media_path(path))
         .collect()
 }
 

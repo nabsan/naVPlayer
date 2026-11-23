@@ -1971,16 +1971,15 @@ dependencies = [
  "dirs",
  "eframe",
  "egui",
- "egui_glow",
  "libloading",
- "once_cell",
  "rfd",
  "serde",
  "thiserror 2.0.18",
  "toml",
  "tracing",
  "tracing-subscriber",
- "windows-sys 0.59.0",
+ "windows 0.61.3",
+ "windows-core 0.61.2",
 ]
 
 [[package]]

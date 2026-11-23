@@ -1,10 +1,8 @@
-﻿pub mod actions;
+pub mod actions;
 pub mod layout;
 pub mod state;
 
 use std::path::PathBuf;
-use std::sync::mpsc::Receiver;
-use std::time::Duration;
 
 use eframe::{
     CreationContext,
@@ -12,7 +10,7 @@ use eframe::{
 };
 
 use crate::infra::config;
-use crate::infra::ipc::IpcMessage;
+use crate::infra::ipc::IpcInbox;
 use crate::infra::recent;
 use crate::player::controller::PlayerController;
 use crate::ui;
@@ -26,16 +24,13 @@ pub struct NaVPlayerApp {
     pub controller: PlayerController,
     main_window_minimized: bool,
     auto_minimize_single_launch: bool,
-    ipc_rx: Receiver<IpcMessage>,
+    ipc_rx: IpcInbox,
 }
 
 impl NaVPlayerApp {
-    pub fn new(
-        _cc: &CreationContext<'_>,
-        launch_paths: Vec<PathBuf>,
-        ipc_rx: Receiver<IpcMessage>,
-    ) -> Self {
-        let mut controller = PlayerController::new();
+    pub fn new(cc: &CreationContext<'_>, launch_paths: Vec<PathBuf>, ipc_rx: IpcInbox) -> Self {
+        ipc_rx.attach(cc.egui_ctx.clone());
+        let mut controller = PlayerController::new(cc.egui_ctx.clone());
         let mut state = AppState::default();
         let config_note = config::app_config_path()
             .map(|path| path.display().to_string())
@@ -50,13 +45,18 @@ impl NaVPlayerApp {
         let launched_with_files = !launch_paths.is_empty();
 
         if launched_with_files {
+            state.view_mode = if launch_paths.len() > 1 {
+                crate::domain::playback::ViewMode::Multi
+            } else {
+                crate::domain::playback::ViewMode::Single
+            };
             let record_paths = launch_paths.clone();
             controller.load_files(&mut state, launch_paths);
             controller.play_all(&mut state);
-            if state.settings.remember_last_files {
-                if let Ok(sessions) = recent::record_recent_session(state.view_mode, &record_paths) {
-                    state.recent_sessions = sessions;
-                }
+            if state.settings.remember_last_files
+                && let Ok(sessions) = recent::record_recent_session(state.view_mode, &record_paths)
+            {
+                state.recent_sessions = sessions;
             }
         }
 
@@ -87,7 +87,7 @@ impl NaVPlayerApp {
     }
 
     fn handle_ipc_messages(&mut self, ctx: &egui::Context) {
-        while let Ok(message) = self.ipc_rx.try_recv() {
+        while let Ok(message) = self.ipc_rx.receiver.try_recv() {
             match message.command.as_str() {
                 "open" => {
                     let paths = message.paths;
@@ -102,12 +102,11 @@ impl NaVPlayerApp {
                     self.controller.load_files(&mut self.state, paths.clone());
                     self.controller.play_all(&mut self.state);
                     self.auto_minimize_single_launch = true;
-                    if self.state.settings.remember_last_files {
-                        if let Ok(sessions) =
+                    if self.state.settings.remember_last_files
+                        && let Ok(sessions) =
                             recent::record_recent_session(self.state.view_mode, &paths)
-                        {
-                            self.state.recent_sessions = sessions;
-                        }
+                    {
+                        self.state.recent_sessions = sessions;
                     }
                 }
                 "show" => {
@@ -127,9 +126,16 @@ impl eframe::App for NaVPlayerApp {
     fn update(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame) {
         self.handle_ipc_messages(ctx);
         self.controller.tick(&mut self.state);
+        if self.state.exit_requested {
+            ctx.send_viewport_cmd(ViewportCommand::Close);
+            return;
+        }
+        if !self.state.loading && self.state.videos.is_empty() {
+            self.auto_minimize_single_launch = false;
+        }
         self.sync_parent_window_visibility(ctx);
-        ui::render_app(ctx, &mut self.state, &mut self.controller);
-        ctx.request_repaint_after(Duration::from_millis(50));
+        if !self.main_window_minimized {
+            ui::render_app(ctx, &mut self.state, &mut self.controller);
+        }
     }
 }
-

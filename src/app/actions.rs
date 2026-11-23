@@ -1,4 +1,4 @@
-﻿use std::fs;
+use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -7,11 +7,7 @@ use crate::domain::playback::{MultiLayout, ViewMode};
 use crate::infra::recent;
 use crate::player::controller::PlayerController;
 
-pub fn open_files(
-    state: &mut AppState,
-    controller: &mut PlayerController,
-    paths: Vec<PathBuf>,
-) {
+pub fn open_files(state: &mut AppState, controller: &mut PlayerController, paths: Vec<PathBuf>) {
     let record_paths = paths.clone();
     controller.load_files(state, paths);
     refresh_recent_sessions(state, record_paths);
@@ -62,7 +58,12 @@ pub fn seek(state: &mut AppState, controller: &mut PlayerController, position: f
 
 pub fn select_video(state: &mut AppState, index: usize) {
     state.selected_index = Some(index);
-    if state.view_mode == ViewMode::Single {
+    if state.view_mode == ViewMode::Single
+        && state
+            .videos
+            .get(index)
+            .is_some_and(|video| !video.is_image())
+    {
         state.master_audio_index = Some(index);
     }
 }
@@ -72,18 +73,14 @@ pub fn set_master_audio(state: &mut AppState, controller: &mut PlayerController,
     controller.sync_audio(state);
 }
 
-
 pub fn close_selected(state: &mut AppState, controller: &mut PlayerController) {
     controller.close_selected(state);
 }
-
-
 
 pub fn toggle_auto_thumbnail(state: &mut AppState) {
     state.auto_thumbnail_enabled = !state.auto_thumbnail_enabled;
     state.last_thumbnail_capture_sec = None;
 }
-
 
 pub fn open_thumbnail_folder(state: &mut AppState) {
     let Some(dir) = state.current_thumbnail_dir_path() else {
@@ -102,7 +99,6 @@ pub fn open_thumbnail_folder(state: &mut AppState) {
     }
 }
 
-
 fn refresh_recent_sessions(state: &mut AppState, paths: Vec<PathBuf>) {
     if !state.settings.remember_last_files {
         return;
@@ -110,6 +106,6 @@ fn refresh_recent_sessions(state: &mut AppState, paths: Vec<PathBuf>) {
 
     match recent::record_recent_session(state.view_mode, &paths) {
         Ok(sessions) => state.recent_sessions = sessions,
-        Err(err) => state.status_message = format!("Recent files save error: {err}") ,
+        Err(err) => state.status_message = format!("Recent files save error: {err}"),
     }
 }

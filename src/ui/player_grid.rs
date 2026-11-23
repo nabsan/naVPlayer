@@ -1,4 +1,4 @@
-﻿use eframe::egui::{Align2, Color32, FontId, Sense, Stroke, StrokeKind, Ui};
+use eframe::egui::{Align2, Color32, FontId, Sense, Stroke, StrokeKind, Ui};
 
 use crate::app::actions;
 use crate::app::layout::compute_player_rects;
@@ -24,7 +24,12 @@ pub fn show(ui: &mut Ui, state: &mut AppState, controller: &mut PlayerController
 
     for (index, rect) in rects.iter().enumerate() {
         let (title, position_sec, duration_sec, muted) = match state.videos.get(index) {
-            Some(video) => (video.title.clone(), video.position_sec, video.duration_sec, video.muted),
+            Some(video) => (
+                video.title.clone(),
+                video.position_sec,
+                video.duration_sec,
+                video.muted,
+            ),
             None => continue,
         };
         let id = ui.make_persistent_id(("video_tile", index));
@@ -59,7 +64,11 @@ pub fn show(ui: &mut Ui, state: &mut AppState, controller: &mut PlayerController
                 title,
                 position_sec,
                 duration_sec,
-if muted { "Muted | external mpv window" } else { "Master audio | external mpv window" }
+                if muted {
+                    "Muted | external mpv window"
+                } else {
+                    "Master audio | external mpv window"
+                }
             ),
             FontId::proportional(18.0),
             Color32::WHITE,
@@ -69,5 +78,3 @@ if muted { "Muted | external mpv window" } else { "Master audio | external mpv w
         }
     }
 }
-
-

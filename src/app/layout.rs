@@ -1,4 +1,4 @@
-﻿use eframe::egui::{pos2, vec2, Rect};
+use eframe::egui::{Rect, pos2, vec2};
 
 use crate::domain::playback::MultiLayout;
 

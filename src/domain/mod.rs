@@ -1,3 +1,4 @@
-﻿pub mod playback;
+pub mod media;
+pub mod playback;
 pub mod settings;
 pub mod video;

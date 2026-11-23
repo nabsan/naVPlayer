@@ -1,4 +1,4 @@
-﻿use eframe::egui::{Align2, Color32, FontId, Sense, Stroke, StrokeKind, Ui, Vec2};
+use eframe::egui::{Align2, Color32, FontId, Sense, Stroke, StrokeKind, Ui, Vec2};
 
 use crate::app::state::AppState;
 use crate::player::controller::PlayerController;
@@ -23,7 +23,10 @@ pub fn show(ui: &mut Ui, state: &mut AppState, controller: &mut PlayerController
             painter.text(
                 rect.left_top() + eframe::egui::vec2(18.0, 18.0),
                 Align2::LEFT_TOP,
-                format!("{}\n{:.1}s / {:.1}s\nExternal mpv window", video.title, video.position_sec, video.duration_sec),
+                format!(
+                    "{}\n{:.1}s / {:.1}s\nExternal mpv window",
+                    video.title, video.position_sec, video.duration_sec
+                ),
                 FontId::proportional(18.0),
                 Color32::WHITE,
             );
@@ -43,5 +46,3 @@ pub fn show(ui: &mut Ui, state: &mut AppState, controller: &mut PlayerController
     }
     ui.allocate_space(Vec2::ZERO);
 }
-
-

@@ -40,7 +40,11 @@ pub fn recent_store_path() -> PathBuf {
     std::env::current_exe()
         .ok()
         .and_then(|path| path.parent().map(|parent| parent.join("recent_files.toml")))
-        .or_else(|| std::env::current_dir().ok().map(|dir| dir.join("recent_files.toml")))
+        .or_else(|| {
+            std::env::current_dir()
+                .ok()
+                .map(|dir| dir.join("recent_files.toml"))
+        })
         .unwrap_or_else(|| PathBuf::from("recent_files.toml"))
 }
 
@@ -60,11 +64,7 @@ pub fn load_recent_sessions() -> Vec<RecentSession> {
 }
 
 pub fn record_recent_session(view_mode: ViewMode, paths: &[PathBuf]) -> Result<Vec<RecentSession>> {
-    let normalized: Vec<PathBuf> = paths
-        .iter()
-        .filter(|path| path.exists())
-        .cloned()
-        .collect();
+    let normalized: Vec<PathBuf> = paths.iter().filter(|path| path.exists()).cloned().collect();
     if normalized.is_empty() {
         return Ok(load_recent_sessions());
     }

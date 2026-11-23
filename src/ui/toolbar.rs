@@ -1,7 +1,7 @@
 use eframe::egui::{self, Button, RichText, Ui};
 
-use crate::app::actions;
 use crate::app::APP_VERSION;
+use crate::app::actions;
 use crate::app::state::AppState;
 use crate::domain::playback::{MultiLayout, ViewMode};
 use crate::infra::file_dialog;
@@ -27,7 +27,11 @@ pub fn show(ui: &mut Ui, state: &mut AppState, controller: &mut PlayerController
         layout_selector(ui, state);
         ui.separator();
 
-        let sync_label = if state.sync_enabled { "Sync ON" } else { "Sync OFF" };
+        let sync_label = if state.sync_enabled {
+            "Sync ON"
+        } else {
+            "Sync OFF"
+        };
         if ui.button(sync_label).clicked() {
             actions::toggle_sync(state);
         }
@@ -88,7 +92,10 @@ fn speed_selector(ui: &mut Ui, state: &mut AppState, controller: &mut PlayerCont
         .show_ui(ui, |ui| {
             for speed in SPEEDS {
                 if ui
-                    .selectable_label((state.speed - speed).abs() < f32::EPSILON, format!("{speed:.2}x"))
+                    .selectable_label(
+                        (state.speed - speed).abs() < f32::EPSILON,
+                        format!("{speed:.2}x"),
+                    )
                     .clicked()
                 {
                     actions::set_speed(state, controller, speed);
@@ -101,7 +108,11 @@ fn recent_selector(ui: &mut Ui, state: &mut AppState, controller: &mut PlayerCon
     egui::ComboBox::from_label("Recent")
         .selected_text("Recent Sessions")
         .show_ui(ui, |ui| {
-            let items: Vec<String> = state.recent_sessions.iter().map(|session| session.summary()).collect();
+            let items: Vec<String> = state
+                .recent_sessions
+                .iter()
+                .map(|session| session.summary())
+                .collect();
             for (index, label) in items.into_iter().enumerate() {
                 if ui.selectable_label(false, label).clicked() {
                     actions::open_recent(state, controller, index);

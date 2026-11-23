@@ -11,6 +11,10 @@ pub struct VideoItem {
 }
 
 impl VideoItem {
+    pub fn is_image(&self) -> bool {
+        crate::domain::media::is_image_path(&self.path)
+    }
+
     pub fn new(id: usize, path: PathBuf) -> Self {
         let title = path
             .file_name()

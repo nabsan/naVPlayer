@@ -2,3 +2,5 @@
 libmpv-2.dll
 recent_files.toml
 
+/dist
+__pycache__/

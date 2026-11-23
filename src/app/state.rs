@@ -3,7 +3,7 @@ use crate::domain::settings::AppSettings;
 use crate::domain::video::VideoItem;
 use crate::infra::recent::RecentSession;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AppState {
     pub view_mode: ViewMode,
     pub layout: MultiLayout,
@@ -21,6 +21,8 @@ pub struct AppState {
     pub status_message: String,
     pub recent_sessions: Vec<RecentSession>,
     pub settings: AppSettings,
+    pub exit_requested: bool,
+    pub loading: bool,
 }
 
 impl Default for AppState {
@@ -42,6 +44,8 @@ impl Default for AppState {
             status_message: "Ready".to_owned(),
             recent_sessions: Vec::new(),
             settings: AppSettings::default(),
+            exit_requested: false,
+            loading: false,
         }
     }
 }
@@ -63,6 +67,7 @@ impl AppState {
     pub fn max_duration_sec(&self) -> f64 {
         self.videos
             .iter()
+            .filter(|video| !video.is_image())
             .map(|video| video.duration_sec)
             .fold(0.0, f64::max)
     }
